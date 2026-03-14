@@ -220,8 +220,140 @@ public class DrawerPanel extends JPanel {
         }
         return Maxindex;
     }
- 
 
+    /** ---------------------------------------------------------------------------------------------------------------------------------
+    Abdulrahman part
+ * Finds the point with the minimum y-coordinate.
+ * If there's a tie, returns the point with the smallest x-coordinate.
+ * 
+ * Input: List of Point objects
+ * Output: Point with minimum y-coordinate (leftmost if tie), or null if list is empty
+ */
+public Point findMinYPoint(List<Point> points) {
+    if (points == null || points.isEmpty()) return null;
+    Point minYPoint = points.get(0);
+    for (Point p : points) {
+        if (p.y < minYPoint.y || (p.y == minYPoint.y && p.x < minYPoint.x)) { 
+            minYPoint = p;
+        }
+    }
+    return minYPoint;
+}
+
+/**
+ * Determines the orientation of three points using cross product.
+ * 
+ * Input: Three Point objects (a, b, c)
+ * Output: 
+ *   1 if c is counter-clockwise from line a->b
+ *  -1 if c is clockwise from line a->b
+ *   0 if a, b, c are collinear
+ */
+public int ccw(Point a, Point b, Point c) {
+    // Calculate cross product to determine orientation
+    double area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    
+    // Determine orientation based on cross product
+    if (area < 0) return -1;  // Clockwise
+    if (area > 0) return 1;   // Counter-clockwise
+    return 0;                 // Points are collinear
+}
+
+/**
+ * Sorts points in counter-clockwise order around the pivot point (point with min y).
+ * Collinear points are sorted by distance from pivot (closest first).
+ * 
+ * Input: List of Point objects (will be modified)
+ * Output: Sorted list with pivot removed (pivot is the minimum y point)
+ */
+public List<Point> sortedAngle(List<Point> points) {
+    Point startP = findMinYPoint(points);
+    final Point pivot = startP;
+    
+    // Remove the pivot from the list to avoid duplicates
+    points.remove(startP);
+    
+    Collections.sort(points, (a, b) -> {
+        int orientation = ccw(pivot, a, b);
+        
+        if (orientation == 0) {
+            // Collinear points - sort by distance from pivot (closest first)
+            double distA = Math.pow(a.x - pivot.x, 2) + Math.pow(a.y - pivot.y, 2);
+            double distB = Math.pow(b.x - pivot.x, 2) + Math.pow(b.y - pivot.y, 2);
+            return Double.compare(distA, distB);
+        }
+        
+        return -orientation; // Counter-clockwise points come first
+        // if b is a counter clockwise of a, then let a come after b
+        // if b is a clockwise of a, then let b coem after a 
+    });
+    
+    return points;
+}
+
+
+    /**
+ * Sorts points by polar angle around the pivot point (point with min y).
+ * Uses atan2 to calculate angles. Collinear points sorted by distance.
+ * 
+ * Input: List of Point objects (will be modified)
+ * Output: Sorted list with pivot removed (pivot is the minimum y point)
+ */
+    public List<Point> sortedAngle2(List<Point> points) {
+    Point startP = findMinYPoint(points);
+    final Point pivot = startP;
+    
+    // Remove the pivot from the list to avoid duplicates
+    points.remove(startP);
+    
+    Collections.sort(points, (a, b) -> {
+        // Calculate polar angles using atan2
+        double angleA = Math.atan2(a.y - pivot.y, a.x - pivot.x);
+        double angleB = Math.atan2(b.y - pivot.y, b.x - pivot.x);
+        
+        int angleCompare = Double.compare(angleA, angleB);
+        if (angleCompare != 0) return angleCompare;
+        
+        // If angles are equal (collinear), sort by distance from pivot
+        double distA = Math.pow(a.x - pivot.x, 2) + Math.pow(a.y - pivot.y, 2);
+        double distB = Math.pow(b.x - pivot.x, 2) + Math.pow(b.y - pivot.y, 2);
+        return Double.compare(distA, distB);
+    });
+
+/**
+ * Graham's Scan algorithm to find the convex hull of a set of points.
+ * 
+ * Input: List of Point objects (at least 3 points required)
+ * Output: Stack of Point objects representing the convex hull in counter-clockwise order,
+ *         starting from the point with minimum y-coordinate. Returns null if less than 3 points.
+ */
+public Stack<Point> Graham_Algorithm(List<Point> points) { // you can convert it into Array by ArrayList<> constructoer 
+    if (points == null || points.size() < 3) return null; // Need at least 3 points
+    
+    Point startP = findMinYPoint(points);
+    List<Point> sorted = sortedAngle(points);
+    
+    Stack<Point> stack = new Stack<>();
+    stack.push(startP);  // Start with the pivot point
+    stack.push(sorted.get(0));
+    
+    // Process each point in sorted order
+    for (int i = 1; i < sorted.size(); i++) {
+        Point top = stack.pop();
+        
+        // Remove points that make clockwise or collinear turn
+        while (!stack.isEmpty() && ccw(stack.peek(), top, sorted.get(i)) <= 0) {
+            top = stack.pop();
+        }
+        
+        stack.push(top);
+        stack.push(sorted.get(i));
+    }
+    
+    return stack; 
+}
+ 
+// -----------------------------------------------------------------------------------------------------------
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
@@ -276,7 +408,7 @@ public class DrawerPanel extends JPanel {
             int y = panelHeight - PADDING - (p.y * drawingHeight / MAX_COORD);
             g2d.fillOval(x - 3, y - 3, 6, 6);
         }
-
+            		
         // --- 3. Draw the hull (MODIFIED to use coordinate transform) ---
         g2d.setColor(Color.RED);
         g2d.setStroke(new java.awt.BasicStroke(2)); // Thicker line for hull
@@ -308,192 +440,3 @@ public class DrawerPanel extends JPanel {
             g2d.drawLine(x1, y1, x2, y2);
         }
     }
-    // ======================= QUICKHULL ALGORITHM ==========================
-    public int[] QuickHull() {
-        List<Point> points = new ArrayList<>();
-        for (String xy : XYList) {
-            String[] parts = xy.split(",");
-            points.add(new Point((int) Double.parseDouble(parts[0]), (int) Double.parseDouble(parts[1])));
-        }
-
-        if (points.size() < 3) return new int[0];
-
-        // Find leftmost and rightmost points
-        Point minXPoint = points.get(0), maxXPoint = points.get(0);
-        for (Point p : points) {
-            if (p.x < minXPoint.x) minXPoint = p;
-            if (p.x > maxXPoint.x) maxXPoint = p;
-        }
-
-        List<Point> hull = new ArrayList<>();
-        hull.add(minXPoint);
-        hull.add(maxXPoint);
-
-        List<Point> leftSet = new ArrayList<>();
-        List<Point> rightSet = new ArrayList<>();
-
-        for (Point p : points) {
-            if (p.equals(minXPoint) || p.equals(maxXPoint)) continue;
-            if (pointLocation(minXPoint, maxXPoint, p) == -1)
-                leftSet.add(p);
-            else if (pointLocation(minXPoint, maxXPoint, p) == 1)
-                rightSet.add(p);
-        }
-
-        findHull(minXPoint, maxXPoint, rightSet, hull);
-        findHull(maxXPoint, minXPoint, leftSet, hull);
-
-        // Convert to indices in XYList order
-        int[] hullIndices = new int[hull.size()];
-        for (int i = 0; i < hull.size(); i++) {
-            Point p = hull.get(i);
-            for (int j = 0; j < XYList.length; j++) {
-                String[] parts = XYList[j].split(",");
-                double x = Double.parseDouble(parts[0]);
-                double y = Double.parseDouble(parts[1]);
-                if (p.x == (int)x && p.y == (int)y) {
-                    hullIndices[i] = j;
-                    break;
-                }
-            }
-        }
-
-        return hullIndices;
-    }
-
-    // Determine side of point
-    private int pointLocation(Point A, Point B, Point P) {
-        int cp1 = (B.x - A.x) * (P.y - A.y) - (B.y - A.y) * (P.x - A.x);
-        if (cp1 > 0) return 1;   // Left side
-        else if (cp1 == 0) return 0;
-        else return -1;          // Right side
-    }
-
-    // Distance from line AB to point C
-    private double distance(Point A, Point B, Point C) {
-        double ABx = B.x - A.x;
-        double ABy = B.y - A.y;
-        double num = Math.abs(ABx * (A.y - C.y) - ABy * (A.x - C.x));
-        double den = Math.sqrt(ABx * ABx + ABy * ABy);
-        return num / den;
-    }
-
-    // Recursive divide-and-conquer
-    private void findHull(Point A, Point B, List<Point> set, List<Point> hull) {
-        int insertPosition = hull.indexOf(B);
-        if (insertPosition == -1) {
-            // Fallback: if B is not yet in hull, add at end
-            insertPosition = hull.size();
-        }
-
-        if (set.isEmpty()) return;
-
-        if (set.size() == 1) {
-            Point p = set.get(0);
-            hull.add(insertPosition, p);
-            return;
-        }
-
-
-        double dist = Double.NEGATIVE_INFINITY;
-        Point furthestPoint = null;
-        for (Point p : set) {
-            double distance = distance(A, B, p);
-            if (distance > dist) {
-                dist = distance;
-                furthestPoint = p;
-            }
-        }
-        hull.add(insertPosition, furthestPoint);
-
-        // Split remaining points
-        List<Point> leftSetAP = new ArrayList<>();
-        for (Point p : set) {
-            if (p == furthestPoint) continue;
-            if (pointLocation(A, furthestPoint, p) == 1)
-                leftSetAP.add(p);
-        }
-
-        List<Point> leftSetPB = new ArrayList<>();
-        for (Point p : set) {
-            if (p == furthestPoint) continue;
-            if (pointLocation(furthestPoint, B, p) == 1)
-                leftSetPB.add(p);
-        }
-
-        findHull(A, furthestPoint, leftSetAP, hull);
-        findHull(furthestPoint, B, leftSetPB, hull);
-    }
-    public void QuickHullConvexHull() {
-    List<Point> points = new ArrayList<>();
-    for (String xy : XYList) {
-        String[] parts = xy.split(",");
-        points.add(new Point((int) Double.parseDouble(parts[0]), (int) Double.parseDouble(parts[1])));
-    }
-
-    if (points.size() < 3) return;
-
-    // Find leftmost and rightmost points
-    Point minXPoint = points.get(0), maxXPoint = points.get(0);
-    for (Point p : points) {
-        if (p.x < minXPoint.x) minXPoint = p;
-        if (p.x > maxXPoint.x) maxXPoint = p;
-    }
-
-    List<Point> upperHull = new ArrayList<>();
-    List<Point> lowerHull = new ArrayList<>();
-
-    List<Point> upperSet = new ArrayList<>();
-    List<Point> lowerSet = new ArrayList<>();
-
-    for (Point p : points) {
-        if (p.equals(minXPoint) || p.equals(maxXPoint)) continue;
-        if (pointLocation(minXPoint, maxXPoint, p) == 1)
-            upperSet.add(p);
-        else if (pointLocation(minXPoint, maxXPoint, p) == -1)
-            lowerSet.add(p);
-    }
-
-    upperHull.add(minXPoint);
-    findHull(minXPoint, maxXPoint, upperSet, upperHull);
-    upperHull.add(maxXPoint);
-
-    lowerHull.add(maxXPoint);
-    findHull(maxXPoint, minXPoint, lowerSet, lowerHull);
-    lowerHull.add(minXPoint);
-
-    // Convert to indices
-    UpperHullQuick = toIndices(upperHull);
-    LowerHullQuick = toIndices(lowerHull);
-
-    // Combine both into one hull
-    List<Point> fullHull = new ArrayList<>(upperHull);
-    fullHull.addAll(lowerHull.subList(1, lowerHull.size() - 1)); // avoid duplicates
-
-    ExtremPointBrute = toIndices(fullHull);
-    ExtremCounter = fullHull.size();
-
-    AddHullPoint(ExtremPointBrute);
-    repaint();
-}
-
-    // Helper to convert a list of points to XYList indices
-    private int[] toIndices(List<Point> pointList) {
-        int[] indices = new int[pointList.size()];
-        for (int i = 0; i < pointList.size(); i++) {
-            Point p = pointList.get(i);
-            for (int j = 0; j < XYList.length; j++) {
-                String[] parts = XYList[j].split(",");
-                double x = Double.parseDouble(parts[0]);
-                double y = Double.parseDouble(parts[1]);
-                if (p.x == (int) x && p.y == (int) y) {
-                    indices[i] = j;
-                    break;
-                }
-            }
-        }
-        return indices;
-    }
-
-
-}
